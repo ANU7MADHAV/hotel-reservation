@@ -14,7 +14,7 @@ func (app *Applications) GetHotel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hotel := &data.Hotels{
+	hotel := &data.HotelsType{
 		ID:        id,
 		CreatedAt: time.Now(),
 		Name:      "Stay",
@@ -45,5 +45,28 @@ func (app *Applications) CreateHotels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Fprintf(w, "%+v\n", input)
+	hotel := &data.HotelsType{
+		Name:     input.Name,
+		Address:  input.Address,
+		Location: input.Location,
+	}
+
+	err = app.data.Hotels.Insert(hotel)
+
+	fmt.Println("err", err)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	headers := make(http.Header)
+	headers.Set("Location", fmt.Sprintf("/v1/movies/%d", hotel.ID))
+
+	err = app.writeJson(w, http.StatusCreated, Envelope{"hotel": hotel})
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
 }

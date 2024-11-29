@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
+	"hotel-reservation/internal/data"
 	"log"
 	"net/http"
 	"os"
@@ -22,12 +23,16 @@ type config struct {
 }
 
 type Dsn struct {
-	dsn string
+	dsn          string
+	maxOpenConns int
+	maxIdleConns int
+	maxIdleTime  string
 }
 
 type Applications struct {
 	config *config
 	logger *log.Logger
+	data   data.Models
 }
 
 func main() {
@@ -35,7 +40,10 @@ func main() {
 
 	flag.IntVar(&config.port, "port", 4000, "API SERVER PORT")
 	flag.StringVar(&config.env, "environment", "development", "ENVIRONMENT")
-	flag.StringVar(&config.dsn.dsn, "db-dsn", "postgres://hotel::your_password@localhost/hotel_reservation?sslmode=disable", "POSTGRES SQL DATABASE DSN")
+	flag.StringVar(&config.dsn.dsn, "db-dsn", "postgres://hotel:your_password@localhost:5432/hotel_reservation?sslmode=disable", "POSTGRES SQL DATABASE DSN")
+	flag.IntVar(&config.dsn.maxOpenConns, "db-max-open-conns", 25, "POSTGRES maximum open connections")
+	flag.IntVar(&config.dsn.maxIdleConns, "db-max-idle-conns", 25, "POSTGRES maximum idle connections")
+	flag.StringVar(&config.dsn.maxIdleTime, "db-max-idle-time", "15m", "POSTGRES maximum idle time")
 
 	flag.Parse()
 
@@ -52,6 +60,7 @@ func main() {
 	app := &Applications{
 		config: &config,
 		logger: logger,
+		data:   data.NewHotelModel(db),
 	}
 
 	srv := &http.Server{
@@ -69,9 +78,20 @@ func main() {
 func openDb(cfg *config) (*sql.DB, error) {
 	db, err := sql.Open("postgres", cfg.dsn.dsn)
 	if err != nil {
-		return nil, nil
+		return nil, err
 	}
-	defer db.Close()
+	log.Println("Setting connection pool parameters...")
+
+	db.SetMaxOpenConns(cfg.dsn.maxOpenConns)
+	db.SetMaxIdleConns(cfg.dsn.maxIdleConns)
+
+	duration, err := time.ParseDuration(cfg.dsn.maxIdleTime)
+
+	if err != nil {
+		return nil, err
+	}
+
+	db.SetConnMaxIdleTime(duration)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -81,6 +101,7 @@ func openDb(cfg *config) (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println("db", db)
 
 	return db, nil
 }
